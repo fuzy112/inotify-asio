@@ -165,20 +165,33 @@ public:
     }
 
     template <typename CompletionToken>
-    boost::asio::async_result<void(boost::system::error_code), CompletionToken>
+    auto
     async_watch(CompletionToken &&token)
     {
         auto initiation = [](auto &&completion_handler,
             boost::asio::posix::stream_descriptor& desc,
             boost::beast::flat_buffer& buffer)
         {
-            struct intermediate_handler : boost::asio::coroutine
+            struct watch_op : boost::asio::coroutine
             {
+                watch_op(
+                    boost::asio::posix::stream_descriptor &desc,
+                    boost::beast::flat_buffer& buffer,
+                    std::decay_t<decltype(completion_handler)> handler,
+                    bool need_read)
+                    : desc_(desc)
+                    , buffer_(buffer)
+                    , handler_(std::move(handler))
+                    , need_read_(need_read)
+                {
+                    (*this)();
+                }
+
                 boost::asio::posix::stream_descriptor &desc_;
                 boost::beast::flat_buffer& buffer_;
                 std::decay_t<decltype(completion_handler)> handler_;
 
-                bool need_read;
+                const bool need_read_;
 
 #include <boost/asio/yield.hpp>
                 void operator()(
@@ -187,7 +200,7 @@ public:
                 {
                     reenter(this)
                     {
-                        if (need_read)
+                        if (need_read_)
                         {
                             yield desc_.async_read_some(buffer_.prepare(min_buffer_size), std::move(*this));
 
@@ -196,6 +209,8 @@ public:
                                 handler_(ec, event{});
                                 yield return;
                             }
+
+                            buffer_.commit(bytes_transferred);
                         }
                         else
                         {
@@ -209,16 +224,16 @@ public:
 #include <boost/asio/unyield.hpp>
             };
 
-            intermediate_handler{
-                {},
+            watch_op
+            {
                 desc,
                 buffer,
                 completion_handler,
                 buffer.size() == 0
-            }();
+            };
         };
 
-        boost::asio::async_initiate<
+        return boost::asio::async_initiate<
             CompletionToken, 
             void(boost::system::error_code, event)>(
                 initiation, token, desc_, buffer_);
