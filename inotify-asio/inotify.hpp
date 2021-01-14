@@ -101,9 +101,9 @@ private:
 
 class inotify
 {
-public:
-    explicit inotify(boost::asio::io_context &ioc)
-        : desc_(ioc)
+public:   
+    explicit inotify(const boost::asio::any_io_executor &ex)
+        : desc_(ex)
     {
         int fd = ::inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
         if (fd < 0)
@@ -111,6 +111,13 @@ public:
             throw boost::system::system_error(errno, boost::system::system_category(), "inotify::inotify");
         }
         desc_.assign(fd);
+    }
+    
+    template <typename ExecutionContext>
+    explicit inotify(ExecutionContext &context,
+                     typename std::enable_if<std::is_convertible<ExecutionContext &, boost::asio::execution_context &>::value, int>::type * = 0)
+        : inotify(context.get_executor())
+    {
     }
 
     watch_item add(const std::string &pathname, mask_type mask, boost::system::error_code &ec)
