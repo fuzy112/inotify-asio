@@ -104,6 +104,8 @@ template <typename Executor>
 class basic_inotify
 {
 public:
+    typedef Executor executor_type;
+
     explicit basic_inotify(const Executor &ex)
         : desc_(ex)
     {
@@ -119,10 +121,16 @@ public:
     }
     
     template <typename ExecutionContext>
-    explicit basic_inotify(ExecutionContext &context,
-                     typename std::enable_if<std::is_convertible<ExecutionContext &, boost::asio::execution_context &>::value, int>::type * = nullptr)
+    explicit basic_inotify(
+        ExecutionContext &context,
+        std::enable_if_t<std::is_convertible<ExecutionContext &, boost::asio::execution_context &>::value, int> * = nullptr)
         : basic_inotify(context.get_executor())
     {
+    }
+
+    executor_type get_executor()
+    {
+        return desc_.get_executor();
     }
 
     watch_item add(
@@ -185,7 +193,7 @@ public:
     }
 
     template <typename CompletionToken>
-    auto
+    decltype(auto)
     async_watch(CompletionToken &&token)
     {
         auto initiation = [](auto &&completion_handler,
