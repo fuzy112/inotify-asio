@@ -16,6 +16,8 @@
 namespace inotify_asio 
 {
 
+using watch_descriptor = std::uint32_t;
+
 using mask_type = std::uint32_t;
 using cookie_type = std::uint32_t;
 
@@ -98,24 +100,48 @@ private:
     std::string name_;
 };
 
-
-class inotify
+template <typename Executor>
+class basic_inotify
 {
 public:
-    explicit inotify(boost::asio::io_context &ioc)
-        : desc_(ioc)
+    typedef Executor executor_type;
+
+    explicit basic_inotify(const Executor &ex)
+        : desc_(ex)
     {
         int fd = ::inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
         if (fd < 0)
         {
-            throw boost::system::system_error(errno, boost::system::system_category(), "inotify::inotify");
+            throw boost::system::system_error(
+                errno, 
+                boost::system::system_category(),
+                "inotify::inotify");
         }
         desc_.assign(fd);
     }
-
-    watch_item add(const std::string &pathname, mask_type mask, boost::system::error_code &ec)
+    
+    template <typename ExecutionContext>
+    explicit basic_inotify(
+        ExecutionContext &context,
+        std::enable_if_t<std::is_convertible<ExecutionContext &, boost::asio::execution_context &>::value, int> * = nullptr)
+        : basic_inotify(context.get_executor())
     {
-        int wd = ::inotify_add_watch(desc_.native_handle(), pathname.c_str(), mask);
+    }
+
+    executor_type get_executor()
+    {
+        return desc_.get_executor();
+    }
+
+    watch_item add(
+        const std::string &pathname,
+        mask_type mask,
+        boost::system::error_code &ec)
+    {
+        int wd = ::inotify_add_watch(
+            desc_.native_handle(),
+            pathname.c_str(), 
+            mask);
         if (wd < 0)
         {
             ec.assign(errno, boost::system::system_category());
@@ -142,7 +168,9 @@ public:
     {
         if (buffer_.size() == 0)
         {
-            std::size_t bytes = desc_.read_some(buffer_.prepare(min_buffer_size), ec);
+            std::size_t bytes = desc_.read_some(
+                buffer_.prepare(min_buffer_size),
+                ec);
             if (ec)
             {
                 return {};
@@ -165,7 +193,7 @@ public:
     }
 
     template <typename CompletionToken>
-    auto
+    decltype(auto)
     async_watch(CompletionToken &&token)
     {
         auto initiation = [](auto &&completion_handler,
@@ -202,7 +230,9 @@ public:
                     {
                         if (need_read_)
                         {
-                            yield desc_.async_read_some(buffer_.prepare(min_buffer_size), std::move(*this));
+                            yield desc_.async_read_some(
+                                buffer_.prepare(min_buffer_size),
+                                std::move(*this));
 
                             if (ec)
                             {
@@ -214,7 +244,9 @@ public:
                         }
                         else
                         {
-                            yield boost::asio::post(desc_.get_executor(), std::move(*this));
+                            yield boost::asio::post(
+                                desc_.get_executor(), 
+                                std::move(*this));
                         }
 
                         handler_(ec, extract_event(buffer_));
@@ -242,10 +274,10 @@ public:
 private:
     static event extract_event(boost::beast::flat_buffer &buffer)
     {
-        const struct inotify_event *evbuf = static_cast<const struct inotify_event *>(
-            buffer.data().data());
+        const struct inotify_event *evbuf = 
+            static_cast<const struct inotify_event *>(
+                buffer.data().data());
         event ev(evbuf);
-
         buffer.consume(sizeof(struct inotify_event) + evbuf->len);
         return ev;
     }
@@ -253,6 +285,8 @@ private:
     boost::asio::posix::stream_descriptor desc_;
     boost::beast::flat_buffer buffer_;
 };
+
+typedef basic_inotify<boost::asio::any_io_executor> inotify;
 
 }
 
