@@ -57,7 +57,7 @@ public:
     }
 
 private:
-    int wd_;
+    watch_descriptor wd_;
     int fd_;
 };
 
@@ -94,9 +94,9 @@ public:
     }
 
 private:
-    uint32_t wd_;
-    uint32_t mask_;
-    uint32_t cookie_;
+    watch_descriptor wd_;
+    mask_type mask_;
+    cookie_type cookie_;
     std::string name_;
 };
 
@@ -105,6 +105,12 @@ class basic_inotify
 {
 public:
     typedef Executor executor_type;
+
+    template <typename Executor1>
+    struct rebind_executor
+    {
+        using other = basic_inotify<Executor1>;
+    };
 
     explicit basic_inotify(const Executor &ex)
         : desc_(ex)
@@ -192,11 +198,11 @@ public:
         return ret;
     }
 
-    template <typename CompletionToken>
+    template <typename CompletionToken = boost::asio::default_completion_token_t<Executor>>
     decltype(auto)
-    async_watch(CompletionToken &&token)
+    async_watch(CompletionToken &&token = CompletionToken())
     {
-        auto initiation = [](auto &&completion_handler,
+        auto initiation = [](auto completion_handler,
             boost::asio::posix::stream_descriptor& desc,
             boost::beast::flat_buffer& buffer)
         {
@@ -260,7 +266,7 @@ public:
             {
                 desc,
                 buffer,
-                completion_handler,
+                std::move(completion_handler),
                 buffer.size() == 0
             };
         };
@@ -268,7 +274,7 @@ public:
         return boost::asio::async_initiate<
             CompletionToken, 
             void(boost::system::error_code, event)>(
-                initiation, token, desc_, buffer_);
+                initiation, token, std::ref(desc_), std::ref(buffer_));
     }
 
 private:
