@@ -277,6 +277,26 @@ public:
                 initiation, token, std::ref(desc_), std::ref(buffer_));
     }
 
+    void cancel()
+    {
+        desc_.cancel();
+    }
+
+    void close()
+    {
+        desc_.close();
+    }
+
+    void cancel(boost::system::error_code& ec)
+    {
+        desc_.cancel(ec);
+    }
+
+    void close(boost::system::error_code& ec)
+    {
+        desc_.close(ec);
+    }
+
 private:
     static event extract_event(boost::beast::flat_buffer &buffer)
     {
