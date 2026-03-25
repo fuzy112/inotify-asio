@@ -6,12 +6,9 @@
 #include <boost/asio/coroutine.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/beast/core/flat_buffer.hpp>
-#include <boost/noncopyable.hpp>
 
 #include <string>
 #include <string_view>
-#include <cstring>
-
 #include <sys/inotify.h>
 
 namespace inotify_asio 
@@ -71,7 +68,7 @@ public:
         : wd_(ev->wd),
           mask_(ev->mask),
           cookie_(ev->cookie),
-          name_(ev->name, ev->len ? strnlen(ev->name, ev->len) : 0)
+          name_(ev->name)
     {}
 
     int wd() const
