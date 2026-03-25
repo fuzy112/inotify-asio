@@ -10,6 +10,7 @@
 
 #include <string>
 #include <string_view>
+#include <cstring>
 
 #include <sys/inotify.h>
 
@@ -70,7 +71,7 @@ public:
         : wd_(ev->wd),
           mask_(ev->mask),
           cookie_(ev->cookie),
-          name_(ev->name, ev->len ? ev->len - 1 : 0)
+          name_(ev->name, ev->len ? strnlen(ev->name, ev->len) : 0)
     {}
 
     int wd() const
